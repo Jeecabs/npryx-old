@@ -128,4 +128,4 @@ wrapping **`npx` execution** specifically, **failing closed**, offering the inli
 
 ## License
 
-Released into the public domain under CC0-1.0. See `LICENSE.md`.
+ISC. See `LICENSE.md`.

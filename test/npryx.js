@@ -1,8 +1,10 @@
 'use strict'
-// Pure-logic tests for npryx. No network: every registry shape is a captured
-// `npm view --json` fixture (cowsay / esbuild / sigstore, real shapes Jan 2026).
+// Pure-logic tests for npryx — zero deps (Node's stdlib test runner), no network.
+// Every registry shape is a captured `npm view --json` fixture (cowsay / esbuild /
+// sigstore, real shapes Jan 2026). Run with: node --test test/npryx.js
 
-const test = require('tap').test
+const { test } = require('node:test')
+const assert = require('node:assert')
 const { targetSpec, splitSpec, isRegistrySpec, pickVersion, summarize, typosquat, trustMatch } = require('../npryx.js')
 
 // --- captured `npm view --json` fixtures (trimmed to fields npryx reads) ------
@@ -28,97 +30,87 @@ const SIGSTORE = { // clean scripts + provenance
   dist: { integrity: 'sha512-sigstorexxx', attestations: { provenance: { predicateType: 'https://slsa.dev/provenance/v1' } } }
 }
 
-test('targetSpec finds the package and skips flags + value-flag pairs', t => {
-  t.equal(targetSpec(['cowsay', 'moo']), 'cowsay')
-  t.equal(targetSpec(['-p', 'lol', '-c', 'x']), 'lol')
-  t.equal(targetSpec(['--package=foo', 'bar']), 'foo')
-  t.equal(targetSpec(['--cache', '/tmp/x', 'realpkg']), 'realpkg', 'value-flag value is not mistaken for the pkg')
-  t.equal(targetSpec(['--node-arg', '--inspect', 'cowsay']), 'cowsay')
-  t.equal(targetSpec(['--help']), null)
-  t.equal(targetSpec([]), null)
-  t.end()
+test('targetSpec finds the package and skips flags + value-flag pairs', () => {
+  assert.strictEqual(targetSpec(['cowsay', 'moo']), 'cowsay')
+  assert.strictEqual(targetSpec(['-p', 'lol', '-c', 'x']), 'lol')
+  assert.strictEqual(targetSpec(['--package=foo', 'bar']), 'foo')
+  assert.strictEqual(targetSpec(['--cache', '/tmp/x', 'realpkg']), 'realpkg', 'value-flag value is not mistaken for the pkg')
+  assert.strictEqual(targetSpec(['--node-arg', '--inspect', 'cowsay']), 'cowsay')
+  assert.strictEqual(targetSpec(['--help']), null)
+  assert.strictEqual(targetSpec([]), null)
 })
 
-test('splitSpec separates name@version and keeps @scope intact', t => {
-  t.same(splitSpec('cowsay'), { name: 'cowsay', version: null })
-  t.same(splitSpec('cowsay@1.2.3'), { name: 'cowsay', version: '1.2.3' })
-  t.same(splitSpec('@scope/pkg'), { name: '@scope/pkg', version: null })
-  t.same(splitSpec('@scope/pkg@2'), { name: '@scope/pkg', version: '2' })
-  t.equal(splitSpec(null), null)
-  t.end()
+test('splitSpec separates name@version and keeps @scope intact', () => {
+  assert.deepStrictEqual(splitSpec('cowsay'), { name: 'cowsay', version: null })
+  assert.deepStrictEqual(splitSpec('cowsay@1.2.3'), { name: 'cowsay', version: '1.2.3' })
+  assert.deepStrictEqual(splitSpec('@scope/pkg'), { name: '@scope/pkg', version: null })
+  assert.deepStrictEqual(splitSpec('@scope/pkg@2'), { name: '@scope/pkg', version: '2' })
+  assert.strictEqual(splitSpec(null), null)
 })
 
-test('isRegistrySpec accepts registry names, rejects paths/urls/git', t => {
-  t.equal(isRegistrySpec('cowsay'), true)
-  t.equal(isRegistrySpec('@scope/pkg'), true)
-  t.equal(isRegistrySpec('./local'), false)
-  t.equal(isRegistrySpec('/abs/path'), false)
-  t.equal(isRegistrySpec('github:piuccio/cowsay'), false)
-  t.equal(isRegistrySpec('git+ssh://x/y.git'), false)
-  t.equal(isRegistrySpec('user/repo'), false, 'github shorthand is not a registry name')
-  t.end()
+test('isRegistrySpec accepts registry names, rejects paths/urls/git', () => {
+  assert.strictEqual(isRegistrySpec('cowsay'), true)
+  assert.strictEqual(isRegistrySpec('@scope/pkg'), true)
+  assert.strictEqual(isRegistrySpec('./local'), false)
+  assert.strictEqual(isRegistrySpec('/abs/path'), false)
+  assert.strictEqual(isRegistrySpec('github:piuccio/cowsay'), false)
+  assert.strictEqual(isRegistrySpec('git+ssh://x/y.git'), false)
+  assert.strictEqual(isRegistrySpec('user/repo'), false, 'github shorthand is not a registry name')
 })
 
-test('pickVersion takes the highest from an ascending array, else the object', t => {
-  t.equal(pickVersion([{ version: '1.5.0' }, { version: '1.6.0' }]).version, '1.6.0')
-  t.equal(pickVersion({ version: '2.0.0' }).version, '2.0.0')
-  t.equal(pickVersion([]), null)
-  t.end()
+test('pickVersion takes the highest from an ascending array, else the object', () => {
+  assert.strictEqual(pickVersion([{ version: '1.5.0' }, { version: '1.6.0' }]).version, '1.6.0')
+  assert.strictEqual(pickVersion({ version: '2.0.0' }).version, '2.0.0')
+  assert.strictEqual(pickVersion([]), null)
 })
 
-test('summarize: cowsay is clean (no install hooks, no provenance)', t => {
+test('summarize: cowsay is clean (no install hooks, no provenance)', () => {
   const s = summarize(COWSAY)
-  t.equal(s.name, 'cowsay')
-  t.equal(s.version, '1.6.0')
-  t.equal(s.runsInstallScripts, false)
-  t.same(s.hooks, [])
-  t.equal(s.provenance, null)
-  t.equal(s.deprecated, null)
-  t.equal(s.published, '2024-01-26T06:24:22.739Z')
-  t.same(s.maintainers, ['piuccio'], 'name parsed out of "name <email>"')
-  t.equal(s.repo, 'git+https://github.com/piuccio/cowsay.git')
-  t.ok(s.integrity.startsWith('sha512-'))
-  t.end()
+  assert.strictEqual(s.name, 'cowsay')
+  assert.strictEqual(s.version, '1.6.0')
+  assert.strictEqual(s.runsInstallScripts, false)
+  assert.deepStrictEqual(s.hooks, [])
+  assert.strictEqual(s.provenance, null)
+  assert.strictEqual(s.deprecated, null)
+  assert.strictEqual(s.published, '2024-01-26T06:24:22.739Z')
+  assert.deepStrictEqual(s.maintainers, ['piuccio'], 'name parsed out of "name <email>"')
+  assert.strictEqual(s.repo, 'git+https://github.com/piuccio/cowsay.git')
+  assert.ok(s.integrity.startsWith('sha512-'))
 })
 
-test('summarize: esbuild flags the postinstall hook AND shows provenance', t => {
+test('summarize: esbuild flags the postinstall hook AND shows provenance', () => {
   const s = summarize(ESBUILD)
-  t.equal(s.runsInstallScripts, true)
-  t.same(s.hooks, ['postinstall'])
-  t.equal(s.provenance, 'https://slsa.dev/provenance/v1')
-  t.end()
+  assert.strictEqual(s.runsInstallScripts, true)
+  assert.deepStrictEqual(s.hooks, ['postinstall'])
+  assert.strictEqual(s.provenance, 'https://slsa.dev/provenance/v1')
 })
 
-test('summarize: sigstore has provenance but no install hooks', t => {
+test('summarize: sigstore has provenance but no install hooks', () => {
   const s = summarize(SIGSTORE)
-  t.equal(s.runsInstallScripts, false)
-  t.equal(s.provenance, 'https://slsa.dev/provenance/v1')
-  t.end()
+  assert.strictEqual(s.runsInstallScripts, false)
+  assert.strictEqual(s.provenance, 'https://slsa.dev/provenance/v1')
 })
 
-test('summarize picks the highest version when handed a range array', t => {
+test('summarize picks the highest version when handed a range array', () => {
   const s = summarize([{ name: 'cowsay', version: '1.5.0' }, COWSAY])
-  t.equal(s.version, '1.6.0')
-  t.end()
+  assert.strictEqual(s.version, '1.6.0')
 })
 
-test('typosquat catches one-edit lookalikes, not exact or scoped names', t => {
-  t.equal(typosquat('crossenv'), 'cross-env', 'the real crossenv malware case')
-  t.equal(typosquat('expres'), 'express')
-  t.equal(typosquat('express'), null, 'exact match is the real package')
-  t.equal(typosquat('cowsay'), null, 'popular exact name is not a squat')
-  t.equal(typosquat('@scope/express'), null, 'scoped names are skipped')
-  t.equal(typosquat('totally-unrelated-name'), null)
-  t.end()
+test('typosquat catches one-edit lookalikes, not exact or scoped names', () => {
+  assert.strictEqual(typosquat('crossenv'), 'cross-env', 'the real crossenv malware case')
+  assert.strictEqual(typosquat('expres'), 'express')
+  assert.strictEqual(typosquat('express'), null, 'exact match is the real package')
+  assert.strictEqual(typosquat('cowsay'), null, 'popular exact name is not a squat')
+  assert.strictEqual(typosquat('@scope/express'), null, 'scoped names are skipped')
+  assert.strictEqual(typosquat('totally-unrelated-name'), null)
 })
 
-test('trustMatch: integrity hit = trusted, differ = changed, absent = unknown', t => {
+test('trustMatch: integrity hit = trusted, differ = changed, absent = unknown', () => {
   const s = summarize(ESBUILD)
-  t.equal(trustMatch({ esbuild: { integrity: s.integrity } }, s).status, 'trusted')
+  assert.strictEqual(trustMatch({ esbuild: { integrity: s.integrity } }, s).status, 'trusted')
   const changed = trustMatch({ esbuild: { integrity: 'sha512-OLD', version: '0.1.0' } }, s)
-  t.equal(changed.status, 'changed')
-  t.equal(changed.from, '0.1.0')
-  t.equal(changed.to, '0.28.1')
-  t.equal(trustMatch({}, s).status, 'unknown')
-  t.end()
+  assert.strictEqual(changed.status, 'changed')
+  assert.strictEqual(changed.from, '0.1.0')
+  assert.strictEqual(changed.to, '0.28.1')
+  assert.strictEqual(trustMatch({}, s).status, 'unknown')
 })
