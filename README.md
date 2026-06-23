@@ -126,13 +126,6 @@ package safety signals, and npryx borrows its signal taxonomy. npryx differs by
 wrapping **`npx` execution** specifically, **failing closed**, offering the inline
 `--ignore-scripts` run, and keeping a TOFU trust store.
 
-## History
-
-This repository previously hosted [`libnpx`](https://github.com/npm/npx), the
-standalone `npx` shipped before npm bundled it in 5.2+. The legacy build
-machinery is left intact under `bin/` and the original sources; npryx is the
-current focus.
-
 ## License
 
 Released into the public domain under CC0-1.0. See `LICENSE.md`.
