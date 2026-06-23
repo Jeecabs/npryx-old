@@ -1,167 +1,138 @@
-⚠️ DEPRECATED: This project has been deprecated - **npx** is now part of the **[npm cli](https://github.com/npm/cli)**
+<p align="center">
+  <img src="assets/npryx-logo.png" alt="npryx logo" width="180" />
+</p>
 
-[![npm](https://img.shields.io/npm/v/npx.svg)](https://npm.im/npx) [![license](https://img.shields.io/npm/l/npx.svg)](https://npm.im/npx) [![Travis](https://img.shields.io/travis/npm/npx.svg)](https://travis-ci.org/npm/npx) [![AppVeyor](https://ci.appveyor.com/api/projects/status/github/npm/npx?svg=true)](https://ci.appveyor.com/project/npm/npx) [![Coverage Status](https://coveralls.io/repos/github/npm/npx/badge.svg?branch=latest)](https://coveralls.io/github/npm/npx?branch=latest)
+<h1 align="center">npryx</h1>
+<p align="center"><strong>A security-first superset of <code>npx</code>.</strong></p>
 
-# npx(1) -- execute npm package binaries
-
-## SYNOPSIS
-
-`npx [options] <command>[@version] [command-arg]...`
-
-`npx [options] [-p|--package <pkg>]... <command> [command-arg]...`
-
-`npx [options] -c '<command-string>'`
-
-`npx --shell-auto-fallback [shell]`
-
-## INSTALL
-
-`npm install -g npx`
-
-## DESCRIPTION
-
-Executes `<command>` either from a local `node_modules/.bin`, or from a central cache, installing any packages needed in order for `<command>` to run.
-
-By default, `npx` will check whether `<command>` exists in `$PATH`, or in the local project binaries, and execute that. If `<command>` is not found, it will be installed prior to execution.
-
-Unless a `--package` option is specified, `npx` will try to guess the name of the binary to invoke depending on the specifier provided. All package specifiers understood by `npm` may be used with `npx`, including git specifiers, remote tarballs, local directories, or scoped packages.
-
-If a full specifier is included, or if `--package` is used, npx will always use a freshly-installed, temporary version of the package. This can also be forced with the `--ignore-existing` flag.
-
-* `-p, --package <package>` - define the package to be installed. This defaults to the value of `<command>`. This is only needed for packages with multiple binaries if you want to call one of the other executables, or where the binary name does not match the package name. If this option is provided `<command>` will be executed as-is, without interpreting `@version` if it's there. Multiple `--package` options may be provided, and all the packages specified will be installed.
-
-* `--no-install` - If passed to `npx`, it will only try to run `<command>` if it already exists in the current path or in `$prefix/node_modules/.bin`. It won't try to install missing commands.
-
-* `--cache <path>` - set the location of the npm cache. Defaults to npm's own cache settings.
-
-* `--userconfig <path>` - path to the user configuration file to pass to npm. Defaults to whatever npm's current default is.
-
-* `-c <string>` - Execute `<string>` inside an `npm run-script`-like shell environment, with all the usual environment variables available. Only the first item in `<string>` will be automatically used as `<command>`. Any others _must_ use `-p`.
-
-* `--shell <string>` - The shell to invoke the command with, if any.
-
-* `--shell-auto-fallback [<shell>]` - Generates shell code to override your shell's "command not found" handler with one that calls `npx`. Tries to figure out your shell, or you can pass its name (either `bash`, `fish`, or `zsh`) as an option. See below for how to install.
-
-* `--ignore-existing` - If this flag is set, npx will not look in `$PATH`, or in the current package's `node_modules/.bin` for an existing version before deciding whether to install. Binaries in those paths will still be available for execution, but will be shadowed by any packages requested by this install.
-
-* `-q, --quiet` - Suppressed any output from npx itself (progress bars, error messages, install reports). Subcommand output itself will not be silenced.
-
-* `-n, --node-arg` - Extra node argument to supply to node when binary is a node script. You can supply this option multiple times to add more arguments.
-
-* `-v, --version` - Show the current npx version.
-
-## EXAMPLES
-
-### Running a project-local bin
+`npx` will happily download and **execute** an arbitrary remote package behind a
+bare prompt:
 
 ```
-$ npm i -D webpack
-$ npx webpack ...
+Need to install the following packages:
+  some-package@1.0.0
+Ok to proceed? (y/N)
 ```
 
-### One-off invocation without local installation
+That prompt tells you **nothing** — not whether the package runs install scripts,
+how old or popular it is, whether it's deprecated, whether it has build
+provenance, or whether the name is one keystroke away from a package you actually
+meant. It's exactly where supply-chain attacks land: typosquats, `postinstall`
+RCE, hijacked re-publishes.
+
+**npryx** forwards every argument to the real `npx`, untouched — but **first** it
+shows you the trust signals `npx` hides, **fails closed** if it can't verify the
+package, offers a one-keystroke `--ignore-scripts` safe run, and **remembers**
+what you've already approved so the prompt keeps meaning something.
 
 ```
-$ npm rm webpack
-$ npx webpack -- ...
-$ cat package.json
-...webpack not in "devDependencies"...
+  npryx — about to fetch & run a package from the npm registry
+
+  package       esbuild@0.28.1   (asked: latest)
+  published     11d ago
+  weekly dl     243,988,517
+  maintainers   esbuild
+  repo          git+https://github.com/evanw/esbuild.git
+  integrity     sha512-HrJrvZv5ayxBzPfwp…
+  provenance    ✓ https://slsa.dev/provenance/v1
+  install hook  ⚠️  YES — runs code on install
+
+  ⚠️  2 warning(s):
+       • runs install scripts (postinstall) — executes code on install
+       • published only 11d ago — brand new, little scrutiny yet
+
+  [y] run   [s] run with --ignore-scripts (safer)   [a] always-trust this version   [N] abort:
 ```
 
-### Invoking a command from a github repository
+## What it shows
+
+A single `npm view <spec> --json` (so it resolves ranges, tags, and **your**
+`.npmrc` — including private registries and auth) gives every signal below.
+Weekly downloads come from the public npm API as a best-effort hint.
+
+| signal | flagged when |
+|---|---|
+| **install scripts** | `preinstall` / `install` / `postinstall` present — the package runs code the moment it's installed |
+| **provenance** | shown ✓ when the build has signed [SLSA provenance](https://slsa.dev) attestations |
+| **publish age** | younger than ~30 days — brand new, little scrutiny yet |
+| **weekly downloads** | under ~1,000 — unusually low |
+| **deprecation** | the maintainer marked it deprecated |
+| **typosquat** | the name is one edit away from a popular package (`crossenv` → `cross-env`) |
+| **context** | resolved `name@version`, maintainers, repo, and `dist.integrity` — always shown |
+
+## The prompt
+
+| key | action |
+|---|---|
+| `y` | run it — `npx --yes <args>` |
+| `s` | run with `--ignore-scripts` (skips install hooks; safer). Note: a few packages legitimately need a `postinstall` to fetch a native binary, e.g. `esbuild` — if it breaks, re-run with `y`. |
+| `a` | always-trust **this exact version**, then run (see below) |
+| `N` | abort (the default — just press Enter) |
+
+## Trust model (TOFU)
+
+Choosing `a` records the package's **integrity hash** (sha512) in
+`~/.npryx.json`. Next time you run the same package:
+
+- **integrity matches** → it's the bytes you approved. npryx prints `trusted ✓`
+  and proceeds with no prompt — no fatigue, no reflexive `y`.
+- **integrity differs** → something changed since you trusted it. npryx re-prompts
+  with a loud `⚠️ CHANGED 1.5.0 → 1.6.0`. A hijacked re-publish produces new bytes,
+  so it **always** re-prompts — trust never silently carries to code you haven't seen.
 
 ```
-$ npx github:piuccio/cowsay
-...or...
-$ npx git+ssh://my.hosted.git:cowsay.git#semver:^1
-...etc...
+npryx --trust-list        # show what you've trusted
+npryx --forget <pkg>      # drop a package from the trust store
 ```
 
-### Execute a full shell command using one npx call w/ multiple packages
+## Fails closed
+
+If npryx **can't** verify a package (no such name, registry error), it does **not**
+quietly run it:
+
+- **interactive terminal** → it warns and defaults the prompt to **No**.
+- **non-interactive / CI** → it **refuses and exits 1**. This deliberately inverts
+  npm's "assume yes in CI" default — an unverified package never auto-runs in a
+  pipeline. To allow specific packages, set `NPRYX_ALLOW=pkg-a,pkg-b`, or
+  `NPRYX_YES=1` to opt out entirely. Packages already in your trust store run
+  without a prompt.
+
+Local paths, URLs, and git specifiers (`./x`, `github:u/r`, `git+ssh://…`) can't be
+verified via the registry and are forwarded straight through, unaltered.
+
+## Install
+
+Requires **Node 18+** (uses global `fetch` and `readline/promises`). Zero runtime
+dependencies.
 
 ```
-$ npx -p lolcatjs -p cowsay -c \
-  'echo "$npm_package_name@$npm_package_version" | cowsay | lolcatjs'
-...
- _____
-< your-cool-package@1.2.3 >
- -----
-        \   ^__^
-         \  (oo)\_______
-            (__)\       )\/\
-                ||----w |
-                ||     ||
+npm install -g npryx
+npryx cowsay "moo"
 ```
 
-### Run node binary with --inspect
+Want every `npx` to go through npryx? Add an alias (npryx prints the right line
+for your shell — it never edits your rc for you):
 
 ```
-$ npx --node-arg=--inspect cowsay
-Debugger listening on ws://127.0.0.1:9229/....
+npryx --alias
+# → add to ~/.zshrc, then restart your shell:
+#   alias npx='npryx'
 ```
 
-### Specify a node version to run npm scripts (or anything else!)
+## Prior art
 
-```
-npx -p node@8 npm run build
-```
+[`npq`](https://github.com/lirantal/npq) pioneered install-time marshalling of npm
+package safety signals, and npryx borrows its signal taxonomy. npryx differs by
+wrapping **`npx` execution** specifically, **failing closed**, offering the inline
+`--ignore-scripts` run, and keeping a TOFU trust store.
 
-## SHELL AUTO FALLBACK
+## History
 
-You can configure `npx` to run as your default fallback command when you type something in the command line with an `@` but the command is not found. This includes installing packages that were not found in the local prefix either.
+This repository previously hosted [`libnpx`](https://github.com/npm/npx), the
+standalone `npx` shipped before npm bundled it in 5.2+. The legacy build
+machinery is left intact under `bin/` and the original sources; npryx is the
+current focus.
 
-For example:
+## License
 
-```
-$ npm@4 --version
-(stderr) npm@4 not found. Trying with npx...
-4.6.1
-$ asdfasdfasf
-zsh: command not found: asfdasdfasdf
-```
-
-Currently, `zsh`, `bash` (>= 4), and `fish` are supported. You can access these completion scripts using `npx --shell-auto-fallback <shell>`.
-
-To install permanently, add the relevant line below to your `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, or as needed. To install just for the shell session, simply run the line.
-
-You can optionally pass through `--no-install` when generating the fallback to prevent it from installing packages if the command is missing.
-
-### For bash@>=4:
-
-```
-$ source <(npx --shell-auto-fallback bash)
-```
-
-### For zsh:
-
-```
-$ source <(npx --shell-auto-fallback zsh)
-```
-
-### For fish:
-
-```
-$ source (npx --shell-auto-fallback fish | psub)
-```
-
-## ACKNOWLEDGEMENTS
-
-Huge thanks to [Kwyn Meagher](https://blog.kwyn.io) for generously donating the package name in the main npm registry. Previously `npx` was used for a Tessel board Neopixels library, which can now be found under [`npx-tessel`](https://npm.im/npx-tessel).
-
-## AUTHOR
-
-Written by [Kat Marchan](https://github.com/zkat).
-
-## REPORTING BUGS
-
-Please file any relevant issues [against the npm/cli repo.](https://github.com/npm/cli)
-
-## LICENSE
-
-This work is released by its authors into the public domain under CC0-1.0. See `LICENSE.md` for details.
-
-## SEE ALSO
-
-* `npm(1)`
-* `npm-run-script(1)`
-* `npm-config(7)`
+Released into the public domain under CC0-1.0. See `LICENSE.md`.

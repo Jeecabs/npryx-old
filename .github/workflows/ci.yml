@@ -1,0 +1,27 @@
+name: ci
+
+on:
+  push:
+    branches: [latest]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: selftest (pure logic, zero deps)
+        run: node npryx.js --selftest
+      - name: lint
+        run: npx --yes standard npryx.js test/npryx.js
+      - name: unit tests
+        run: |
+          dir="$RUNNER_TEMP/taprunner"
+          mkdir -p "$dir" && (cd "$dir" && npm init -y >/dev/null && npm install tap@16 >/dev/null)
+          NODE_PATH="$dir/node_modules" node test/npryx.js

@@ -3,6 +3,9 @@
   "version": "10.2.4",
   "description": "support library for npx -- an tool for executing npm-based packages.",
   "main": "index.js",
+  "bin": {
+    "npryx": "npryx.js"
+  },
   "man": "./libnpx.1",
   "files": [
     "*.js",
@@ -66,6 +69,12 @@
     }
   },
   "engines": {
-    "node": ">=4"
+    "node": ">=18"
+  },
+  "standard": {
+    "globals": [
+      "fetch",
+      "AbortSignal"
+    ]
   }
 }
